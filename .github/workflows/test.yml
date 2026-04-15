@@ -26,12 +26,18 @@ jobs:
         run: |
           cd dumpdecrypted
           make
-          file dumpdecrypted.dylib
+          file dumpdecrypted.dylib   # 确认文件类型
 
-      # 使用 ldid 对 dumpdecrypted.dylib 进行签名（越狱专用）
+      # 使用 ldid 对 dumpdecrypted.dylib 进行签名
       - name: Sign dumpdecrypted.dylib with ldid
         run: |
-          ldid -S dumpdecrypted/dumpdecrypted.dylib
+          # 创建一个空的 entitlements 文件
+          echo '<?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict></dict></plist>' > empty_entitlements.plist
+          
+          # 使用 ldid 签名
+          ldid -Sempty_entitlements.plist dumpdecrypted/dumpdecrypted.dylib
           echo "✅ Signed with ldid"
 
       # 创建 dumpdecrypted 的 .deb 包结构
