@@ -1,4 +1,5 @@
-name: Build and Package Clutch & dumpdecrypted
+# .github/workflows/build-deb.yml
+name: Build and Package Clutch & dumpdecrypted (signed with ldid)
 
 on:
   workflow_dispatch:
@@ -12,9 +13,10 @@ jobs:
         with:
           fetch-depth: 1
 
-      # 安装 dpkg（用于打包 .deb）
-      - name: Install dpkg
-        run: brew install dpkg
+      # ----- 安装 dpkg 和 ldid -----
+      - name: Install dpkg and ldid
+        run: |
+          brew install dpkg ldid
 
       # ----- 编译 dumpdecrypted（仅 arm64）-----
       - name: Checkout dumpdecrypted source
@@ -41,43 +43,13 @@ jobs:
           file dumpdecrypted.dylib
           lipo -info dumpdecrypted.dylib
 
-      # 编译一个占位用的 arm64 可执行文件（用于 IPA 结构）
-      - name: Compile dummy executable for IPA
+      # ----- 使用 ldid 签名 -----
+      - name: Sign dumpdecrypted.dylib with ldid
         run: |
-          cat > dummy.c << 'EOF'
-          int main() {
-              return 0;
-          }
-          EOF
-          clang -arch arm64 -isysroot $(xcrun --sdk iphoneos --show-sdk-path) -o dummy dummy.c
-          file dummy
+          ldid -S dumpdecrypted/dumpdecrypted.dylib
+          echo "✅ Signed with ldid"
 
-      # 创建 IPA 包结构（包含 dumpdecrypted.dylib 和占位可执行文件）
-      - name: Create IPA package
-        run: |
-          mkdir -p Payload/DecryptHelper.app
-          cp dumpdecrypted/dumpdecrypted.dylib Payload/DecryptHelper.app/
-          cp dummy Payload/DecryptHelper.app/DecryptHelper
-          cat > Payload/DecryptHelper.app/Info.plist << 'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>CFBundleExecutable</key>
-              <string>DecryptHelper</string>
-              <key>CFBundleIdentifier</key>
-              <string>com.yourrepo.decrypthelper</string>
-              <key>CFBundleName</key>
-              <string>DecryptHelper</string>
-          </dict>
-          </plist>
-          EOF
-          # 打包成 IPA（实际上是 zip）
-          zip -r dumpdecrypted-iphoneos-arm64.ipa Payload/
-          # 删除临时目录
-          rm -rf Payload
-
-      # ----- 创建 dumpdecrypted 的 .deb 包 -----
+      # ----- 创建 dumpdecrypted 的 .deb 包结构 -----
       - name: Create dumpdecrypted package structure
         run: |
           mkdir -p dumpdecrypted_pkg/usr/lib
@@ -88,9 +60,10 @@ jobs:
           Version: 1.0.0
           Architecture: iphoneos-arm64
           Maintainer: Your Name <your@email.com>
-          Description: dumpdecrypted (unsigned, arm64, iOS 10+)
+          Description: dumpdecrypted (signed with ldid, arm64, iOS 10+)
           Depiction: https://github.com/stefanesser/dumpdecrypted
           EOF
+
       - name: Package dumpdecrypted .deb
         run: |
           dpkg-deb -b dumpdecrypted_pkg com.yourrepo.dumpdecrypted_1.0.0_iphoneos-arm64.deb
@@ -100,7 +73,6 @@ jobs:
         run: |
           wget https://github.com/KJCracks/Clutch/releases/download/2.0.4/Clutch-2.0.4
           chmod +x Clutch-2.0.4
-          # 重命名为更清晰的名称
           cp Clutch-2.0.4 clutch-iphoneos-arm
 
       # ----- 创建 Clutch 的 .deb 包 -----
@@ -117,6 +89,7 @@ jobs:
           Description: Clutch (unsigned)
           Depiction: https://github.com/KJCracks/Clutch
           EOF
+
       - name: Package Clutch .deb
         run: |
           dpkg-deb -b clutch_pkg com.yourrepo.clutch_2.0.4_iphoneos-arm.deb
@@ -127,7 +100,6 @@ jobs:
         with:
           name: all-packages
           path: |
-            dumpdecrypted-iphoneos-arm64.ipa
             dumpdecrypted/dumpdecrypted.dylib
             com.yourrepo.dumpdecrypted_1.0.0_iphoneos-arm64.deb
             clutch-iphoneos-arm
