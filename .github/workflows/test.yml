@@ -1,4 +1,5 @@
-name: Build and Package Clutch & dumpdecrypted
+# .github/workflows/build-deb.yml
+name: Build and Package Clutch & dumpdecrypted (unsigned)
 
 on:
   workflow_dispatch:
@@ -12,12 +13,6 @@ jobs:
         with:
           fetch-depth: 1
 
-      # 安装 ldid 签名工具
-      - name: Install ldid
-        run: |
-          brew install ldid
-          ldid --version
-
       # ----- 编译 dumpdecrypted -----
       - name: Checkout dumpdecrypted source
         run: git clone https://github.com/stefanesser/dumpdecrypted.git
@@ -26,21 +21,10 @@ jobs:
         run: |
           cd dumpdecrypted
           make
-          file dumpdecrypted.dylib   # 确认文件类型
+          # 确认编译产物是 Mach-O 动态库
+          file dumpdecrypted.dylib
 
-      # 使用 ldid 对 dumpdecrypted.dylib 进行签名
-      - name: Sign dumpdecrypted.dylib with ldid
-        run: |
-          # 创建一个空的 entitlements 文件
-          echo '<?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict></dict></plist>' > empty_entitlements.plist
-          
-          # 使用 ldid 签名
-          ldid -Sempty_entitlements.plist dumpdecrypted/dumpdecrypted.dylib
-          echo "✅ Signed with ldid"
-
-      # 创建 dumpdecrypted 的 .deb 包结构
+      # ----- 创建 dumpdecrypted 的 .deb 包结构 -----
       - name: Create dumpdecrypted package structure
         run: |
           mkdir -p dumpdecrypted_pkg/usr/lib
@@ -51,7 +35,7 @@ jobs:
           Version: 1.0.0
           Architecture: iphoneos-arm
           Maintainer: Your Name <your@email.com>
-          Description: A tool to decrypt iOS apps (dumpdecrypted), signed with ldid for jailbreak.
+          Description: dumpdecrypted (unsigned) - decrypt iOS apps. Use with ldid or a signing tool.
           Depiction: https://github.com/stefanesser/dumpdecrypted
           EOF
 
@@ -60,7 +44,7 @@ jobs:
           dpkg-deb -b dumpdecrypted_pkg com.yourrepo.dumpdecrypted_1.0.0_iphoneos-arm.deb
           file com.yourrepo.dumpdecrypted_1.0.0_iphoneos-arm.deb
 
-      # ----- 下载并打包 Clutch -----
+      # ----- 下载并打包 Clutch (无需编译) -----
       - name: Download Clutch binary
         run: |
           wget https://github.com/KJCracks/Clutch/releases/download/2.0.4/Clutch-2.0.4
@@ -76,7 +60,7 @@ jobs:
           Version: 2.0.4
           Architecture: iphoneos-arm
           Maintainer: Your Name <your@email.com>
-          Description: A tool to decrypt iOS apps (Clutch).
+          Description: Clutch (unsigned) - decrypt iOS apps.
           Depiction: https://github.com/KJCracks/Clutch
           EOF
 
@@ -85,11 +69,11 @@ jobs:
           dpkg-deb -b clutch_pkg com.yourrepo.clutch_2.0.4_iphoneos-arm.deb
           file com.yourrepo.clutch_2.0.4_iphoneos-arm.deb
 
-      # ----- 上传 .deb 包 -----
+      # ----- 上传两个 .deb 包作为工作流产物 -----
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: deb-packages
+          name: deb-packages-unsigned
           path: |
             com.yourrepo.dumpdecrypted_1.0.0_iphoneos-arm.deb
             com.yourrepo.clutch_2.0.4_iphoneos-arm.deb
