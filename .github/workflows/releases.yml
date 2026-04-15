@@ -1,0 +1,77 @@
+# .github/workflows/build-decrypted-ipa.yml
+name: 在线合成砸壳后的 IPA 文件
+
+on:
+  workflow_dispatch:  # 手动触发
+
+jobs:
+  build-decrypted-ipa:
+    runs-on: ubuntu-latest  # 使用更轻量的 Ubuntu 环境进行打包
+    steps:
+      # 1. 下载原始 IPA 文件和解密后的二进制文件
+      - name: 下载原始加密 IPA
+        uses: robinraju/release-downloader@v1.9
+        with:
+          repository: "Geeeeeker/dumpdecrypted"  # 替换为你的仓库地址
+          tag: "v1.0.0"
+          fileName: "_7.0.17.ipa"
+          out-file-path: "input"
+
+      - name: 下载解密后的二进制文件
+        uses: robinraju/release-downloader@v1.9
+        with:
+          repository: "Geeeeeker/dumpdecrypted"  # 替换为你的仓库地址
+          tag: "v1.0.0"
+          fileName: "WeChat.decrypted"
+          out-file-path: "input"
+
+      # 2. 解压 IPA 并替换二进制文件
+      - name: 解压并替换二进制文件
+        run: |
+          # 创建临时工作目录
+          mkdir work
+          cd work
+          
+          # 解压 IPA 文件
+          unzip -q ../input/_7.0.17.ipa
+          
+          # 找到 Payload 目录下的 .app 文件夹
+          APP_PATH=$(find Payload -name "*.app" -type d | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "错误: 在 IPA 中未找到 .app bundle"
+            exit 1
+          fi
+          echo "找到应用包: $APP_PATH"
+          
+          # 获取二进制文件名（与 .app 文件夹同名）
+          BINARY_NAME=$(basename "$APP_PATH" .app)
+          ORIG_BINARY="$APP_PATH/$BINARY_NAME"
+          
+          # 检查原始二进制文件是否存在
+          if [ ! -f "$ORIG_BINARY" ]; then
+            echo "错误: 在 $ORIG_BINARY 未找到原始二进制文件"
+            exit 1
+          fi
+          
+          # 替换二进制文件
+          cp ../input/WeChat.decrypted "$ORIG_BINARY"
+          chmod +x "$ORIG_BINARY"
+          echo "✅ 二进制文件已成功替换"
+          
+          # 返回到工作根目录
+          cd ..
+
+      # 3. 重新打包为 IPA 文件
+      - name: 打包为 IPA
+        run: |
+          cd work
+          zip -qr ../WeChat_decrypted.ipa Payload/
+          cd ..
+          echo "✅ 已生成砸壳后的 IPA 文件: WeChat_decrypted.ipa"
+
+      # 4. 上传生成的文件
+      - name: 上传最终产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: WeChat_decrypted_ipa
+          path: WeChat_decrypted.ipa
