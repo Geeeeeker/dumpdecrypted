@@ -1,4 +1,3 @@
-# .github/workflows/build-deb.yml
 name: Build and Package Clutch & dumpdecrypted (unsigned)
 
 on:
@@ -13,15 +12,20 @@ jobs:
         with:
           fetch-depth: 1
 
-      # ----- 编译 dumpdecrypted -----
+      # ----- 编译 dumpdecrypted (仅 arm64，兼容新 SDK) -----
       - name: Checkout dumpdecrypted source
         run: git clone https://github.com/stefanesser/dumpdecrypted.git
 
-      - name: Compile dumpdecrypted
+      - name: Compile dumpdecrypted for arm64 only
         run: |
           cd dumpdecrypted
+          # 备份原 Makefile
+          cp Makefile Makefile.bak
+          # 修改 ARCHS 只保留 arm64，并去掉 -arch armv7 -arch armv7s
+          sed -i '' 's/ARCHS = armv7 armv7s arm64/ARCHS = arm64/' Makefile
+          # 可选：如果仍然链接错误，可以设置最低部署版本
+          # 执行编译
           make
-          # 确认编译产物是 Mach-O 动态库
           file dumpdecrypted.dylib
 
       # ----- 创建 dumpdecrypted 的 .deb 包结构 -----
@@ -33,16 +37,16 @@ jobs:
           cat <<EOF > dumpdecrypted_pkg/DEBIAN/control
           Package: com.yourrepo.dumpdecrypted
           Version: 1.0.0
-          Architecture: iphoneos-arm
+          Architecture: iphoneos-arm64
           Maintainer: Your Name <your@email.com>
-          Description: dumpdecrypted (unsigned) - decrypt iOS apps. Use with ldid or a signing tool.
+          Description: dumpdecrypted (unsigned, arm64) - decrypt iOS apps.
           Depiction: https://github.com/stefanesser/dumpdecrypted
           EOF
 
       - name: Package dumpdecrypted
         run: |
-          dpkg-deb -b dumpdecrypted_pkg com.yourrepo.dumpdecrypted_1.0.0_iphoneos-arm.deb
-          file com.yourrepo.dumpdecrypted_1.0.0_iphoneos-arm.deb
+          dpkg-deb -b dumpdecrypted_pkg com.yourrepo.dumpdecrypted_1.0.0_iphoneos-arm64.deb
+          file com.yourrepo.dumpdecrypted_1.0.0_iphoneos-arm64.deb
 
       # ----- 下载并打包 Clutch (无需编译) -----
       - name: Download Clutch binary
@@ -69,11 +73,11 @@ jobs:
           dpkg-deb -b clutch_pkg com.yourrepo.clutch_2.0.4_iphoneos-arm.deb
           file com.yourrepo.clutch_2.0.4_iphoneos-arm.deb
 
-      # ----- 上传两个 .deb 包作为工作流产物 -----
+      # ----- 上传两个 .deb 包 -----
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: deb-packages-unsigned
           path: |
-            com.yourrepo.dumpdecrypted_1.0.0_iphoneos-arm.deb
+            com.yourrepo.dumpdecrypted_1.0.0_iphoneos-arm64.deb
             com.yourrepo.clutch_2.0.4_iphoneos-arm.deb
