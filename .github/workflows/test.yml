@@ -1,4 +1,5 @@
-name: Build and Package Clutch & dumpdecrypted (unsigned)
+# .github/workflows/build-deb.yml
+name: Build and Package Clutch & dumpdecrypted (unsigned, arm64)
 
 on:
   workflow_dispatch:
@@ -12,21 +13,41 @@ jobs:
         with:
           fetch-depth: 1
 
-      # ----- 编译 dumpdecrypted (仅 arm64，兼容新 SDK) -----
+      # ----- 编译 dumpdecrypted（仅 arm64）-----
       - name: Checkout dumpdecrypted source
         run: git clone https://github.com/stefanesser/dumpdecrypted.git
 
-      - name: Compile dumpdecrypted for arm64 only
+      - name: Patch Makefile for arm64 only and iOS 10 compatibility
         run: |
           cd dumpdecrypted
-          # 备份原 Makefile
-          cp Makefile Makefile.bak
-          # 修改 ARCHS 只保留 arm64，并去掉 -arch armv7 -arch armv7s
-          sed -i '' 's/ARCHS = armv7 armv7s arm64/ARCHS = arm64/' Makefile
-          # 可选：如果仍然链接错误，可以设置最低部署版本
+          # 备份原 Makefile（可选）
+          cp Makefile Makefile.orig
+          # 写入新的 Makefile 内容，只编译 arm64，并设置最低部署版本
+          cat > Makefile << 'EOF'
+          GCC_BIN = `xcrun --sdk iphoneos --find gcc`
+          SDK = `xcrun --sdk iphoneos --show-sdk-path`
+          CFLAGS = -miphoneos-version-min=10.0
+          GCC_BASE = $(GCC_BIN) -Os $(CFLAGS) -Wimplicit -isysroot $(SDK) -F$(SDK)/System/Library/Frameworks -F$(SDK)/System/Library/PrivateFrameworks
+          GCC_UNIVERSAL = $(GCC_BASE) -arch arm64
+
+          all: dumpdecrypted.dylib
+
+          dumpdecrypted.dylib: dumpdecrypted.o 
+          	$(GCC_UNIVERSAL) -dynamiclib -o $@ $^
+
+          %.o: %.c
+          	$(GCC_UNIVERSAL) -c -o $@ $< 
+
+          clean:
+          	rm -f *.o dumpdecrypted.dylib
+          EOF
+          # 显示修改后的 Makefile 以便调试
+          cat Makefile
           # 执行编译
           make
+          # 验证产物架构
           file dumpdecrypted.dylib
+          lipo -info dumpdecrypted.dylib
 
       # ----- 创建 dumpdecrypted 的 .deb 包结构 -----
       - name: Create dumpdecrypted package structure
@@ -39,7 +60,7 @@ jobs:
           Version: 1.0.0
           Architecture: iphoneos-arm64
           Maintainer: Your Name <your@email.com>
-          Description: dumpdecrypted (unsigned, arm64) - decrypt iOS apps.
+          Description: dumpdecrypted (unsigned, arm64, iOS 10+) - decrypt iOS apps.
           Depiction: https://github.com/stefanesser/dumpdecrypted
           EOF
 
@@ -48,7 +69,7 @@ jobs:
           dpkg-deb -b dumpdecrypted_pkg com.yourrepo.dumpdecrypted_1.0.0_iphoneos-arm64.deb
           file com.yourrepo.dumpdecrypted_1.0.0_iphoneos-arm64.deb
 
-      # ----- 下载并打包 Clutch (无需编译) -----
+      # ----- 下载并打包 Clutch（无需修改）-----
       - name: Download Clutch binary
         run: |
           wget https://github.com/KJCracks/Clutch/releases/download/2.0.4/Clutch-2.0.4
@@ -73,7 +94,7 @@ jobs:
           dpkg-deb -b clutch_pkg com.yourrepo.clutch_2.0.4_iphoneos-arm.deb
           file com.yourrepo.clutch_2.0.4_iphoneos-arm.deb
 
-      # ----- 上传两个 .deb 包 -----
+      # ----- 上传 .deb 包 -----
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
