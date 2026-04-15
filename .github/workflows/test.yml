@@ -1,4 +1,3 @@
-# .github/workflows/build-deb.yml
 name: Build and Package Clutch & dumpdecrypted
 
 on:
@@ -13,7 +12,13 @@ jobs:
         with:
           fetch-depth: 1
 
-      # 编译 dumpdecrypted
+      # 安装 ldid 签名工具
+      - name: Install ldid
+        run: |
+          brew install ldid
+          ldid --version
+
+      # ----- 编译 dumpdecrypted -----
       - name: Checkout dumpdecrypted source
         run: git clone https://github.com/stefanesser/dumpdecrypted.git
 
@@ -23,13 +28,11 @@ jobs:
           make
           file dumpdecrypted.dylib
 
-      # 使用爱思助手签名 dumpdecrypted.dylib
-      - name: Sign dumpdecrypted.dylib with AISi
-        uses: Apocrathjia/i4tools-sign-action@v1
-        with:
-          apple_id: ${{ secrets.APPLE_ID }}
-          apple_id_password: ${{ secrets.APPLE_ID_PASSWORD }}
-          file_path: dumpdecrypted/dumpdecrypted.dylib
+      # 使用 ldid 对 dumpdecrypted.dylib 进行签名（越狱专用）
+      - name: Sign dumpdecrypted.dylib with ldid
+        run: |
+          ldid -S dumpdecrypted/dumpdecrypted.dylib
+          echo "✅ Signed with ldid"
 
       # 创建 dumpdecrypted 的 .deb 包结构
       - name: Create dumpdecrypted package structure
@@ -42,7 +45,7 @@ jobs:
           Version: 1.0.0
           Architecture: iphoneos-arm
           Maintainer: Your Name <your@email.com>
-          Description: A tool to decrypt iOS apps (dumpdecrypted).
+          Description: A tool to decrypt iOS apps (dumpdecrypted), signed with ldid for jailbreak.
           Depiction: https://github.com/stefanesser/dumpdecrypted
           EOF
 
@@ -51,7 +54,7 @@ jobs:
           dpkg-deb -b dumpdecrypted_pkg com.yourrepo.dumpdecrypted_1.0.0_iphoneos-arm.deb
           file com.yourrepo.dumpdecrypted_1.0.0_iphoneos-arm.deb
 
-      # 下载并打包 Clutch
+      # ----- 下载并打包 Clutch -----
       - name: Download Clutch binary
         run: |
           wget https://github.com/KJCracks/Clutch/releases/download/2.0.4/Clutch-2.0.4
@@ -76,7 +79,7 @@ jobs:
           dpkg-deb -b clutch_pkg com.yourrepo.clutch_2.0.4_iphoneos-arm.deb
           file com.yourrepo.clutch_2.0.4_iphoneos-arm.deb
 
-      # 上传 .deb 包作为工作流产物
+      # ----- 上传 .deb 包 -----
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
