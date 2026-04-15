@@ -13,6 +13,10 @@ jobs:
         with:
           fetch-depth: 1
 
+      # ----- 安装 dpkg（以便使用 dpkg-deb 打包）-----
+      - name: Install dpkg
+        run: brew install dpkg
+
       # ----- 编译 dumpdecrypted（仅 arm64）-----
       - name: Checkout dumpdecrypted source
         run: git clone https://github.com/stefanesser/dumpdecrypted.git
@@ -20,8 +24,6 @@ jobs:
       - name: Patch Makefile for arm64 only and iOS 10 compatibility
         run: |
           cd dumpdecrypted
-          # 备份原 Makefile（可选）
-          cp Makefile Makefile.orig
           # 写入新的 Makefile 内容，只编译 arm64，并设置最低部署版本
           cat > Makefile << 'EOF'
           GCC_BIN = `xcrun --sdk iphoneos --find gcc`
@@ -41,11 +43,7 @@ jobs:
           clean:
           	rm -f *.o dumpdecrypted.dylib
           EOF
-          # 显示修改后的 Makefile 以便调试
-          cat Makefile
-          # 执行编译
           make
-          # 验证产物架构
           file dumpdecrypted.dylib
           lipo -info dumpdecrypted.dylib
 
@@ -69,7 +67,7 @@ jobs:
           dpkg-deb -b dumpdecrypted_pkg com.yourrepo.dumpdecrypted_1.0.0_iphoneos-arm64.deb
           file com.yourrepo.dumpdecrypted_1.0.0_iphoneos-arm64.deb
 
-      # ----- 下载并打包 Clutch（无需修改）-----
+      # ----- 下载并打包 Clutch（无需编译）-----
       - name: Download Clutch binary
         run: |
           wget https://github.com/KJCracks/Clutch/releases/download/2.0.4/Clutch-2.0.4
@@ -94,7 +92,7 @@ jobs:
           dpkg-deb -b clutch_pkg com.yourrepo.clutch_2.0.4_iphoneos-arm.deb
           file com.yourrepo.clutch_2.0.4_iphoneos-arm.deb
 
-      # ----- 上传 .deb 包 -----
+      # ----- 上传两个 .deb 包作为工作流产物 -----
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
